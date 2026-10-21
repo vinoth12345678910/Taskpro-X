@@ -11,8 +11,8 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import { deleteObject, getDownloadURL, getMetadata, ref, uploadBytesResumable, type UploadTask } from "firebase/storage";
-import { db, storage } from "./firebase";
+import type { UploadTask } from "firebase/storage";
+import { db, getStorageInstance } from "./firebase";
 import { toDate } from "./firestore-utils";
 import { logError } from "./logger";
 import type { Profile, TeamResource } from "./types";
@@ -121,12 +121,13 @@ export function uploadFile(
   const id = newResourceId();
   const fileName = safeFileName(file.name);
   const path = `teams/${teamId}/resources/${id}/${fileName}`;
-  const fileRef = ref(storage, path);
   let task: UploadTask | null = null;
 
   const promise = (async () => {
     const problem = validateFile(file);
     if (problem) throw new Error(problem);
+    const [{ ref, uploadBytesResumable, getMetadata, deleteObject }, storage] = await Promise.all([import("firebase/storage"), getStorageInstance()]);
+    const fileRef = ref(storage, path);
     task = uploadBytesResumable(fileRef, file, { contentType: file.type, customMetadata: { uploadedBy: user.uid } });
     task.on("state_changed", (s) => onProgress(s.totalBytes ? s.bytesTransferred / s.totalBytes : 0));
     await task;
@@ -162,6 +163,7 @@ export function uploadFile(
 export async function getDownloadLink(r: TeamResource): Promise<string> {
   if (r.kind === "link" && r.url) return r.url;
   if (!r.storagePath) throw new Error("This resource has no file.");
+  const [{ getDownloadURL, ref }, storage] = await Promise.all([import("firebase/storage"), getStorageInstance()]);
   return getDownloadURL(ref(storage, r.storagePath));
 }
 
@@ -170,6 +172,7 @@ export const updateResource = (id: string, v: { name: string; description: strin
 
 export async function deleteResource(r: TeamResource) {
   if (r.kind === "file" && r.storagePath) {
+    const [{ deleteObject, ref }, storage] = await Promise.all([import("firebase/storage"), getStorageInstance()]);
     await deleteObject(ref(storage, r.storagePath)).catch((e) => {
       if ((e as { code?: string }).code !== "storage/object-not-found") throw e;
     });

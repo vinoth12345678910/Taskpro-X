@@ -12,14 +12,17 @@ import { useMediaQuery } from "@/components/useMediaQuery";
 import { isOnline } from "@/lib/presence";
 import type { ChatMessage } from "@/lib/types";
 import { ChatView } from "./ChatView";
-import { CommandPalette } from "./CommandPalette";
-import { EventsView } from "./EventsView";
+import dynamic from "next/dynamic";
 import { NotificationBell } from "./NotificationCenter";
-import { PeopleView } from "./PeopleView";
-import { ResourcesView } from "./ResourcesView";
-import { ThreadPanel } from "./ThreadPanel";
 import { useTeam } from "./TeamContext";
 import { parseHash, toHash, type NavTarget, type View } from "./nav";
+
+// Heavier, less-visited screens are split out of the initial bundle.
+const EventsView = dynamic(() => import("./EventsView").then((m) => m.EventsView));
+const ResourcesView = dynamic(() => import("./ResourcesView").then((m) => m.ResourcesView));
+const PeopleView = dynamic(() => import("./PeopleView").then((m) => m.PeopleView));
+const ThreadPanel = dynamic(() => import("./ThreadPanel").then((m) => m.ThreadPanel));
+const CommandPalette = dynamic(() => import("./CommandPalette").then((m) => m.CommandPalette));
 
 const NAV: { view: View; label: string; icon: typeof Users }[] = [
   { view: "chat", label: "Chat", icon: MessageSquare },
@@ -95,11 +98,12 @@ export function Shell() {
             <Menu
               align="start"
               trigger={
-                <button className="flex w-full items-center justify-between gap-2 rounded-md border border-rail-line bg-rail-2 px-3 py-2 text-left hover:border-rail-ink-2" aria-label={`Team: ${t.teamName}. Switch team`}>
+                <button className="flex w-full items-center justify-between gap-2 rounded-md border border-rail-line bg-rail-2 px-3 py-2 text-left hover:border-rail-ink-2">
                   <span className="min-w-0">
                     <span className="block text-caption text-rail-ink-2">Team</span>
                     <span className="block truncate text-body font-medium">{t.teamName}</span>
                   </span>
+                  <span className="sr-only">, switch team</span>
                   <ChevronsUpDown size={16} className="shrink-0 text-rail-ink-2" aria-hidden="true" />
                 </button>
               }
@@ -150,12 +154,13 @@ export function Shell() {
             <Menu
               align="start"
               trigger={
-                <button className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md p-1.5 text-left hover:bg-rail-2" aria-label="Account menu">
+                <button className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md p-1.5 text-left hover:bg-rail-2">
                   <Avatar name={t.me.name} size={32} lead={t.isLead} />
                   <span className="min-w-0">
                     <span className="block truncate text-body font-medium">{t.me.name}</span>
                     <span className="block text-caption text-rail-ink-2">{t.isLead ? "Team lead" : "Member"}</span>
                   </span>
+                  <span className="sr-only">, account menu</span>
                 </button>
               }
             >
@@ -184,12 +189,11 @@ export function Shell() {
           <div className="ml-auto flex items-center gap-1.5">
             <button
               onClick={() => setPaletteOpen(true)}
-              aria-label="Search"
               aria-keyshortcuts="Control+K Meta+K"
               className="flex h-9 items-center gap-2 rounded-md border border-line-strong bg-surface px-2.5 text-ink-3 hover:bg-surface-2 sm:w-56"
             >
               <Search size={16} aria-hidden="true" />
-              <span className="hidden flex-1 text-left text-body sm:block">Search</span>
+              <span className="sr-only sm:not-sr-only sm:flex-1 sm:text-left sm:text-body">Search</span>
               <span className="hidden sm:block"><Kbd>Ctrl K</Kbd></span>
             </button>
             <NotificationBell onNavigate={navigate} />

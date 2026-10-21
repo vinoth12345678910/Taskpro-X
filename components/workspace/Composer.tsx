@@ -18,13 +18,15 @@ interface Props {
   /** Must be idempotent for a given `id` (it is reused on retry). Throw to signal failure. */
   onSend: (args: { id: string; text: string; mentions: string[] }) => Promise<void>;
   autoFocus?: boolean;
+  /** Narrow containers (thread panel): shorter hint text */
+  compact?: boolean;
 }
 
 /**
  * Message composer. A message id is minted when sending starts and kept until it succeeds, so a retry
  * after a failure or a double-submit writes the same document instead of creating a duplicate.
  */
-export function Composer({ roster, meUid, placeholder, label, disabled, disabledReason, onSend, autoFocus }: Props) {
+export function Composer({ roster, meUid, placeholder, label, disabled, disabledReason, onSend, autoFocus, compact }: Props) {
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const pendingId = useRef<string | null>(null);
@@ -150,7 +152,7 @@ export function Composer({ roster, meUid, placeholder, label, disabled, disabled
         />
         <div className="flex items-center justify-between gap-2 px-2 pb-2 pl-3.5">
           <p className={cn("text-caption", remaining < 200 ? "text-warn" : "text-ink-3")}>
-            {remaining < 200 ? `${remaining} characters left` : "Enter to send · Shift+Enter for a new line · @ to mention"}
+            {remaining < 200 ? `${remaining} characters left` : compact ? "Enter to send" : "Enter to send · Shift+Enter for a new line · @ to mention"}
           </p>
           <Button variant="primary" size="sm" onClick={() => void submit()} disabled={!text.trim() || disabled} aria-label="Send message">
             <Send size={14} aria-hidden="true" /> Send

@@ -8,7 +8,7 @@ import {
   persistentMultipleTabManager,
   type Firestore,
 } from "firebase/firestore";
-import { connectStorageEmulator, getStorage } from "firebase/storage";
+import type { FirebaseStorage } from "firebase/storage";
 
 // Firebase web configuration is public by design (it identifies the project; access is
 // enforced by security rules). Every value can be overridden at build time.
@@ -47,10 +47,19 @@ function createFirestore(): Firestore {
 
 export const auth = getAuth(app);
 export const db = createFirestore();
-export const storage = getStorage(app);
+
+let storagePromise: Promise<FirebaseStorage> | null = null;
+/** Storage is only needed for file uploads/downloads, so its SDK is loaded on demand (keeps it out of the main bundle). */
+export function getStorageInstance(): Promise<FirebaseStorage> {
+  storagePromise ??= import("firebase/storage").then(({ getStorage, connectStorageEmulator }) => {
+    const s = getStorage(app);
+    if (USE_EMULATORS) connectStorageEmulator(s, "127.0.0.1", 9199);
+    return s;
+  });
+  return storagePromise;
+}
 
 if (USE_EMULATORS && isNew) {
   connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
   connectFirestoreEmulator(db, "127.0.0.1", 8080);
-  connectStorageEmulator(storage, "127.0.0.1", 9199);
 }

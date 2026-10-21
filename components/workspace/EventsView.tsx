@@ -2,7 +2,7 @@
 import * as Tabs from "@radix-ui/react-tabs";
 import { AnimatePresence, m } from "motion/react";
 import { CalendarDays, ChevronLeft, ChevronRight, Clock, Pencil, Plus, XCircle } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useToast } from "@/components/providers/Toast";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -34,7 +34,7 @@ function EventCard({ ev, tz, canManage, highlight, onEdit, onCancel }: { ev: Tea
       transition={{ duration: 0.16 }}
       className={cn("flex gap-4 rounded-lg border bg-surface p-4", highlight ? "border-accent ring-1 ring-accent" : "border-line", cancelled && "opacity-70")}
     >
-      <div className="w-20 shrink-0 text-right">
+      <div className="w-24 shrink-0 whitespace-nowrap text-right">
         <time dateTime={ev.startAt.toISOString()} className="block text-title font-semibold tabular-nums">
           {timeOnly(ev.startAt, tz)}
         </time>
@@ -73,6 +73,8 @@ function EventCard({ ev, tz, canManage, highlight, onEdit, onCancel }: { ev: Tea
   );
 }
 
+const dateLabel = (k: string) => formatInZone(new Date(`${k}T12:00:00Z`), "UTC", { month: "long", day: "numeric", year: "numeric" }, "en-US");
+
 function groupByDay(events: TeamEvent[], tz: string) {
   const groups = new Map<string, TeamEvent[]>();
   for (const e of events) {
@@ -84,7 +86,12 @@ function groupByDay(events: TeamEvent[], tz: string) {
 
 function MonthGrid({ events, tz, selected, onSelect }: { events: TeamEvent[]; tz: string; selected: string; onSelect: (k: string) => void }) {
   const [cursor, setCursor] = useState(() => {
-    const [y, mo] = dayKey(new Date(), tz).split("-").map(Number);
+    const todayKey = dayKey(new Date(), tz);
+    // Open on the current month, or on the month of the next event when this month is empty.
+    const next = events.find((e) => e.status === "scheduled" && e.endAt.getTime() >= Date.now());
+    const monthOf = (k: string) => k.slice(0, 7);
+    const target = next && !events.some((e) => monthOf(dayKey(e.startAt, tz)) === monthOf(todayKey)) ? dayKey(next.startAt, tz) : todayKey;
+    const [y, mo] = target.split("-").map(Number);
     return { y, m: mo - 1 };
   });
   const todayKey = dayKey(new Date(), tz);
@@ -117,18 +124,17 @@ function MonthGrid({ events, tz, selected, onSelect }: { events: TeamEvent[]; tz
       <div className="grid grid-cols-7 gap-1 text-center text-caption font-medium text-ink-3" aria-hidden="true">
         {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => <div key={d} className="py-1">{d}</div>)}
       </div>
-      <div className="grid grid-cols-7 gap-1" role="grid" aria-label={monthLabel}>
+      <div className="grid grid-cols-7 gap-1" role="group" aria-label={`${monthLabel} days`}>
         {cells.map((k, i) => {
-          if (!k) return <div key={i} role="gridcell" aria-hidden="true" />;
+          if (!k) return <div key={i} aria-hidden="true" />;
           const list = byDay.get(k) ?? [];
           const active = list.filter((e) => e.status === "scheduled").length;
           return (
             <button
               key={k}
-              role="gridcell"
               onClick={() => onSelect(k)}
-              aria-selected={selected === k}
-              aria-label={`${k}${active ? `, ${active} event${active > 1 ? "s" : ""}` : ", no events"}${k === todayKey ? ", today" : ""}`}
+              aria-pressed={selected === k}
+              aria-label={`${dateLabel(k)}${active ? `, ${active} event${active > 1 ? "s" : ""}` : ", no events"}${k === todayKey ? ", today" : ""}`}
               className={cn(
                 "relative flex aspect-square min-h-11 flex-col items-center justify-start rounded-md border p-1 text-body transition-colors sm:aspect-[4/3]",
                 selected === k ? "border-ink bg-surface-2" : "border-transparent hover:bg-surface-2",
@@ -170,6 +176,16 @@ export function EventsView({ focusEventId }: { focusEventId?: string }) {
   const upcoming = useMemo(() => t.events.filter((e) => e.endAt.getTime() >= now), [t.events, now]);
   const past = useMemo(() => t.events.filter((e) => e.endAt.getTime() < now).reverse(), [t.events, now]);
   const dayEvents = useMemo(() => t.events.filter((e) => dayKey(e.startAt, tz) === selectedDay), [t.events, selectedDay, tz]);
+
+  // First time the calendar opens with nothing on the selected day, jump to the next upcoming event's day.
+  const jumped = useRef(false);
+  useEffect(() => {
+    if (tab !== "calendar" || jumped.current || t.eventsState !== "ready") return;
+    jumped.current = true;
+    if (t.events.some((e) => dayKey(e.startAt, tz) === selectedDay)) return;
+    const next = t.events.find((e) => e.status === "scheduled" && e.endAt.getTime() >= Date.now());
+    if (next) setSelectedDay(dayKey(next.startAt, tz));
+  }, [tab, t.eventsState, t.events, selectedDay, tz]);
 
   useEffect(() => {
     if (!focusEventId || t.eventsState !== "ready") return;

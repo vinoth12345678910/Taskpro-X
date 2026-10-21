@@ -40,6 +40,7 @@ export function MessageItem({ message: msg, roster, rosterReady, meUid, isLead, 
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [tapOpen, setTapOpen] = useState(false); // touch devices: tap a message to reveal its actions
 
   const mine = msg.author?.uid === meUid;
   const canEdit = mine && !msg.deleted;
@@ -130,6 +131,11 @@ export function MessageItem({ message: msg, roster, rosterReady, meUid, isLead, 
       transition={{ duration: 0.16 }}
       aria-label={`${msg.author?.name ?? "Unknown"}${when ? `, ${timeFmt.format(when)}` : ""}`}
       id={inThread ? undefined : `msg-${msg.id}`}
+      onClick={(e) => {
+        if (!window.matchMedia("(hover: none)").matches) return;
+        if ((e.target as HTMLElement).closest("button, a, textarea, [role=toolbar]")) return;
+        setTapOpen((o) => !o);
+      }}
       className={cn(
         "group relative flex gap-3 rounded-md px-3 py-1 hover:bg-surface-2/60 focus-within:bg-surface-2/60",
         compact ? "pt-0" : "pt-2",
@@ -205,7 +211,11 @@ export function MessageItem({ message: msg, roster, rosterReady, meUid, isLead, 
 
       {!msg.deleted && !editing && !msg.pending && (
         <div
-          className="absolute -top-3 right-3 flex items-center rounded-md border border-line bg-surface p-0.5 opacity-0 shadow-card transition-opacity focus-within:opacity-100 group-hover:opacity-100 max-md:opacity-100"
+          className={cn(
+            "absolute -top-3 right-3 flex items-center rounded-md border border-line bg-surface p-0.5 shadow-card transition-opacity focus-within:opacity-100 group-hover:opacity-100",
+            // on touch devices the toolbar is shown by tapping the message; while hidden it must not intercept taps
+            tapOpen ? "opacity-100" : "opacity-0 [@media(hover:none)]:pointer-events-none",
+          )}
           role="toolbar"
           aria-label="Message actions"
         >

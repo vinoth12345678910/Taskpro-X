@@ -27,7 +27,10 @@ export async function signUp(p: Person, role: "member" | "team_lead") {
   await p.page.locator("input[name=password]").fill("correct-horse-9");
   await p.page.getByText(role === "team_lead" ? "Team lead" : "Team member", { exact: true }).click();
   await p.page.getByRole("button", { name: "Create account" }).click();
-  await expect(p.page).toHaveURL(role === "team_lead" ? /teamlead-dashboard/ : /member-dashboard/, { timeout: 25_000 });
+  await expect(p.page, `signup stuck for ${p.name}: ${(await p.page.locator("main").innerText().catch(() => "")).replace(/\n/g, " | ").slice(0, 300)} errors=${JSON.stringify(p.errors)}`).toHaveURL(
+    role === "team_lead" ? /teamlead-dashboard/ : /member-dashboard/,
+    { timeout: 25_000 },
+  );
 }
 
 export async function signIn(p: Person) {

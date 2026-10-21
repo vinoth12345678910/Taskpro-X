@@ -86,3 +86,36 @@ Audit date: 2026-10-21. Baseline commit: `92a268b` (`main`). Work branch: `claud
 4. Shared resources (links + files) restricted to team members.
 5. `tsc`, `eslint`, unit tests, rules tests, Playwright e2e and `next build` all run and reported accurately.
 6. Existing routes and the `users`, `team_members`, `team_invites`, `chat_messages` collections keep working; legacy-data migration documented.
+
+---
+
+# Results (end of work)
+
+## Root causes confirmed (and how each was verified)
+| # | Root cause | Fix | Regression coverage |
+| --- | --- | --- | --- |
+| D1 | Events were only React state: never written to or read from Firestore. No time, end or time zone. | `events` collection (UTC timestamps + IANA zone), lead-only writes by rule, idempotent create (client id), live subscription, edit / cancel, DST-aware input parsing. | `tests/unit/datetime.test.ts` (zone math, spring-forward rejection, fall-back, half-hour zones), rules tests (lead-only, `end > start`, cross-team read), e2e: create in Asia/Kolkata → member in America/New_York sees 11:00 PM previous day → reload → edit → cancel; double-click creates one event; DST-skipped time rejected. |
+| D2 | Open rules + client-chosen roles + client-side admin check + unauthenticated-by-membership data. | Membership-based Firestore & Storage rules, immutable roles, invite gating, no admin self-service. | 35 emulator tests (cross-team chat isolation, role escalation, forged ids, invite misuse, storage type/size/ownership, migration). |
+| D3 | README/deps claimed Socket.IO/Redis/Realtime DB; none existed. Chat subscribed to unbounded history, used `alert()`, retry could duplicate. | One transport (Firestore listeners), documented; pagination; idempotent ids; resilient listeners. | e2e: live delivery to a second client, refresh persistence, offline→online sends exactly once, 45-message history pages on demand. |
+
+## Defects found *by the new tests* during development (all fixed)
+1. `team_members` list rule read `resource.data.uid`, which errors against list-query constraints → rosters could silently stop updating. Rewritten with `.get()` defaults + regression test; listeners now auto-recover.
+2. Event notifications were silently never sent: `Intl.DateTimeFormat` rejects `dateStyle` + `timeZoneName`, and the throw happened inside a fire-and-forget promise. Fixed, wrapped so failures are logged, unit-tested.
+3. Signup trusted a *pending local write* as the confirmed profile: aborting right after signup lost the profile. The profile is now trusted only after server acknowledgement.
+4. Composer ignored Enter while the previous message awaited acknowledgement (dropped rapid messages). It now clears immediately and restores the draft only on failure, reusing the same id.
+5. Duplicate DOM ids (thread header) and several ARIA problems found by axe (calendar grid roles, label/name mismatches).
+
+## Verification summary (all executed in this environment)
+| Gate | Result |
+| --- | --- |
+| `tsc --noEmit` | pass |
+| `eslint .` | pass, 0 problems (baseline: 25 errors) |
+| Unit (Vitest) | 26 / 26 pass |
+| Rules + Storage + migration (emulators) | 35 / 35 pass |
+| E2E (Playwright, Auth+Firestore+Storage emulators, Chromium) | 22 / 22 pass: 20 desktop, 2 mobile (Pixel 5 viewport) |
+| Accessibility (axe, WCAG 2.0/2.1 A+AA, serious/critical) | 0 violations on landing, login, signup, chat, event dialog, events (list + calendar), resources, people, notifications panel, search — light and dark |
+| `next build` (static export) | pass; dashboard first-load JS 352 kB (baseline 255 kB: +motion, radix, the new UI; Storage SDK is lazy-loaded) |
+
+**Not verified here (needs the real project / people):** behaviour against production Firebase (no credentials in this environment), Storage on the
+live bucket (may require the Blaze plan), real devices and screen readers (axe covers only what automation can detect), email-link flows, load/scale.
+E2E runs the SDK with HTTP long-polling (emulator mode only); production uses the default streaming transport.

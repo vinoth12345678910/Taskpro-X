@@ -106,10 +106,10 @@ test.describe("event scheduling lifecycle", () => {
 
     await lead.page.getByRole("tab", { name: "Calendar" }).click();
     for (let i = 0; i < 24; i++) {
-      if (await lead.page.getByRole("gridcell", { name: /^2027-02-02, 1 event/ }).count()) break;
+      if (await lead.page.getByRole("button", { name: /February 2, 2027, 1 event/ }).count()) break;
       await lead.page.getByRole("button", { name: "Next month" }).click();
     }
-    await lead.page.getByRole("gridcell", { name: /^2027-02-02, 1 event/ }).click();
+    await lead.page.getByRole("button", { name: /February 2, 2027, 1 event/ }).click();
     await expect(lead.page.getByText(title)).toBeVisible();
 
     await lead.page.keyboard.press("Control+k");

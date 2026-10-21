@@ -18,8 +18,9 @@ test("mobile layout: bottom navigation, no horizontal scroll, chat and events us
   }
 
   // thread opens as a full-height sheet on small screens
-  const msg = page.locator("article", { hasText: text });
-  await msg.getByRole("button", { name: "Reply in thread" }).click();
+  const msg = page.getByRole("log").locator("article", { hasText: text });
+  await msg.getByText(text).tap(); // on touch devices actions appear when a message is tapped
+  await msg.getByRole("button", { name: "Reply in thread" }).tap();
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect(page.getByRole("combobox", { name: "Reply in thread" })).toBeVisible();
   await page.keyboard.press("Escape");

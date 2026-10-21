@@ -141,7 +141,7 @@ test("sign-out and sign-in again restores the same workspace", async ({ browser 
   const text = uniq("persist");
   await send(lead, teamName, text);
   await expect(lead.page.getByRole("log")).toContainText(text);
-  await lead.page.getByRole("button", { name: "Account menu" }).click();
+  await lead.page.getByRole("button", { name: /account menu/ }).click();
   await lead.page.getByRole("menuitem", { name: "Sign out" }).click();
   await expect(lead.page).toHaveURL(/login|\/$/, { timeout: 15_000 }).catch(() => undefined);
   await signIn(lead);
