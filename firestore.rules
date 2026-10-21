@@ -74,8 +74,12 @@ service cloud.firestore {
       return inv.teamLeadId == d.teamLeadId && inv.isActive == true && inv.teamName == d.teamName;
     }
     match /team_members/{memberId} {
+      // .get() with defaults: when evaluated against a list query's constraints, fields the query does not
+      // filter on are undefined, and reading them directly would raise an error instead of evaluating to false.
       allow get, list: if signedIn()
-        && (resource.data.uid == me() || isMember(resource.data.teamLeadId) || isAdmin());
+        && (resource.data.get('uid', '') == me()
+            || isMember(resource.data.get('teamLeadId', ''))
+            || isAdmin());
 
       allow create: if signedIn()
         && request.resource.data.uid == me()

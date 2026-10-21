@@ -1,335 +1,148 @@
-"use client"
-import { useState } from "react"
-import type React from "react"
-import { createUserWithEmailAndPassword } from "firebase/auth"
-import { auth, db } from "@/utils/firebase"
-import { useRouter } from "next/navigation"
-import Link from "next/link"
-import { doc, setDoc, serverTimestamp } from "firebase/firestore"
-import { Eye, EyeOff, User, Mail, Lock, ArrowRight, Crown, Sparkles, UserCheck } from "lucide-react"
+"use client";
+import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
+import { doc, serverTimestamp, setDoc } from "firebase/firestore";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect, useState, type FormEvent } from "react";
+import { AuthShell } from "@/components/AuthShell";
+import { homeFor, useAuth } from "@/components/providers/AuthProvider";
+import { Button } from "@/components/ui/Button";
+import { Field, Input } from "@/components/ui/Field";
+import { cn } from "@/components/ui/cn";
+import { auth, db } from "@/lib/firebase";
+import { friendlyError } from "@/lib/firestore-utils";
+import { logError } from "@/lib/logger";
+import { Eye, EyeOff, Users, Crown } from "lucide-react";
 
-export default function Signup() {
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    password: "",
-    role: "member",
-  })
-  const [showPassword, setShowPassword] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const router = useRouter()
+type ChosenRole = "member" | "team_lead";
+const ROLES: { value: ChosenRole; label: string; hint: string; icon: typeof Users }[] = [
+  { value: "member", label: "Team member", hint: "Join a team with an invite code", icon: Users },
+  { value: "team_lead", label: "Team lead", hint: "Create a team and schedule events", icon: Crown },
+];
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setFormData((prev) => ({
-      ...prev,
-      [e.target.name]: e.target.value,
-    }))
-  }
+export default function SignupPage() {
+  const router = useRouter();
+  const { status, profile } = useAuth();
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [role, setRole] = useState<ChosenRole>("member");
+  const [show, setShow] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [errors, setErrors] = useState<{ name?: string; email?: string; password?: string; form?: string }>({});
 
-  const handleSignup = async () => {
-    if (!formData.name || !formData.email || !formData.password) {
-      alert("Please fill in all fields")
-      return
-    }
+  useEffect(() => {
+    if (status === "ready" && profile) router.replace(homeFor(profile.role));
+  }, [status, profile, router]);
 
-    setIsLoading(true)
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (busy) return;
+    const next: typeof errors = {};
+    if (!name.trim()) next.name = "Tell us your name.";
+    if (!/^\S+@\S+\.\S+$/.test(email.trim())) next.email = "Enter a valid email address.";
+    if (password.length < 6) next.password = "Use at least 6 characters.";
+    setErrors(next);
+    if (Object.keys(next).length) return;
+
+    setBusy(true);
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password)
-      const uid = userCredential.user.uid
-
-      const assignedRole = formData.email === "va3490@srmist.edu.in" ? "admin" : formData.role
-
-      await setDoc(doc(db, "users", uid), {
-        name: formData.name,
-        email: formData.email,
-        role: assignedRole,
+      const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
+      // Roles are limited to member / team_lead here and enforced again by security rules.
+      // Administrator access is never self-service: it is granted by editing the profile in the Firebase console.
+      await setDoc(doc(db, "users", cred.user.uid), {
+        name: name.trim(),
+        email: cred.user.email,
+        role,
         createdAt: serverTimestamp(),
-      })
-
-      if (assignedRole === "admin") {
-        router.push("/admin-dashboard")
-      } else if (assignedRole === "team_lead") {
-        router.push("/teamlead-dashboard")
-      } else {
-        router.push("/member-dashboard")
-      }
-    } catch (error: any) {
-      alert(error.message)
-    } finally {
-      setIsLoading(false)
+      });
+      await updateProfile(cred.user, { displayName: name.trim() }).catch(() => undefined);
+    } catch (err) {
+      logError("auth", "sign-up failed", err);
+      setErrors({ form: friendlyError(err, "We couldn't create your account. Please try again.") });
+      setBusy(false);
     }
   }
-
-  const isAdminEmail = formData.email === "va3490@srmist.edu.in"
-
-  const roleOptions = [
-    {
-      value: "member",
-      label: "Team Member",
-      icon: <User className="w-5 h-5" />,
-      description: "Join teams and collaborate on projects",
-    },
-    {
-      value: "team_lead",
-      label: "Team Lead",
-      icon: <UserCheck className="w-5 h-5" />,
-      description: "Create and manage teams",
-    },
-  ]
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8 relative overflow-hidden">
-      {/* Background Elements */}
-      <div className="absolute inset-0 overflow-hidden">
-        <svg
-          className="absolute top-20 left-20 w-28 h-28 text-blue-200 opacity-20"
-          fill="currentColor"
-          viewBox="0 0 20 20"
-        >
-          <path
-            fillRule="evenodd"
-            d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-6-3a2 2 0 11-4 0 2 2 0 014 0zm-2 4a5 5 0 00-4.546 2.916A5.986 5.986 0 0010 16a5.986 5.986 0 004.546-2.084A5 5 0 0010 11z"
-            clipRule="evenodd"
-          />
-        </svg>
-        <svg
-          className="absolute bottom-20 right-20 w-32 h-32 text-purple-200 opacity-20"
-          fill="currentColor"
-          viewBox="0 0 20 20"
-        >
-          <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z" />
-        </svg>
-        <div className="absolute top-1/3 right-1/3 w-3 h-3 bg-blue-400 rounded-full animate-bounce"></div>
-        <div className="absolute bottom-1/4 left-1/4 w-2 h-2 bg-purple-400 rounded-full animate-bounce delay-500"></div>
-      </div>
+    <AuthShell
+      title="Create your account"
+      subtitle="It takes less than a minute."
+      footer={
+        <>
+          Already have an account?{" "}
+          <Link href="/login" className="font-medium text-accent-text underline underline-offset-4">
+            Sign in
+          </Link>
+        </>
+      }
+    >
+      <form onSubmit={onSubmit} noValidate className="space-y-5">
+        <Field label="Full name" required error={errors.name}>
+          {(p) => <Input {...p} name="name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} invalid={p.invalid} />}
+        </Field>
+        <Field label="Email" required error={errors.email}>
+          {(p) => <Input {...p} type="email" name="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} invalid={p.invalid} />}
+        </Field>
+        <Field label="Password" required error={errors.password} hint="At least 6 characters.">
+          {(p) => (
+            <div className="relative">
+              <Input
+                {...p}
+                type={show ? "text" : "password"}
+                name="password"
+                autoComplete="new-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                invalid={p.invalid}
+                className="pr-11"
+              />
+              <button
+                type="button"
+                onClick={() => setShow((s) => !s)}
+                aria-label={show ? "Hide password" : "Show password"}
+                aria-pressed={show}
+                className="absolute right-1 top-1 grid h-8 w-8 place-items-center rounded-md text-ink-3 hover:bg-surface-2"
+              >
+                {show ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
+              </button>
+            </div>
+          )}
+        </Field>
 
-      <div className="sm:mx-auto sm:w-full sm:max-w-lg relative z-10">
-        {/* Logo Section */}
-        <div className="flex justify-center mb-8">
-          <div className="relative">
-            <div className="flex items-center justify-center w-20 h-20 bg-gradient-to-br from-blue-600 to-purple-600 rounded-3xl shadow-2xl transform -rotate-3 hover:rotate-0 transition-transform duration-300">
-              <span className="text-3xl font-bold text-white">T</span>
-            </div>
-            <div className="absolute -top-2 -right-2">
-              <Sparkles className="w-6 h-6 text-yellow-400 animate-pulse" />
-            </div>
+        <fieldset>
+          <legend className="mb-1.5 text-caption font-medium text-ink-2">I&apos;m joining as</legend>
+          <div className="grid gap-2">
+            {ROLES.map(({ value, label, hint, icon: Icon }) => (
+              <label
+                key={value}
+                className={cn(
+                  "flex cursor-pointer items-center gap-3 rounded-md border p-3 transition-colors has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[var(--focus)]",
+                  role === value ? "border-ink bg-surface" : "border-line-strong hover:bg-surface-2",
+                )}
+              >
+                <input type="radio" name="role" value={value} checked={role === value} onChange={() => setRole(value)} className="sr-only" />
+                <span className={cn("grid h-9 w-9 place-items-center rounded-md", role === value ? "bg-accent text-accent-ink" : "bg-surface-3 text-ink-2")}>
+                  <Icon size={18} aria-hidden="true" />
+                </span>
+                <span>
+                  <span className="block text-body font-medium">{label}</span>
+                  <span className="block text-caption text-ink-3">{hint}</span>
+                </span>
+              </label>
+            ))}
           </div>
-        </div>
+        </fieldset>
 
-        <div className="text-center">
-          <h2 className="text-4xl font-bold tracking-tight text-gray-900 mb-2">
-            Join
-            <span className="block bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-              TaskProx Today
-            </span>
-          </h2>
-          <p className="text-gray-600 text-lg">Create your account and start collaborating</p>
-        </div>
-      </div>
-
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-lg relative z-10">
-        <div className="bg-white/80 backdrop-blur-xl py-10 px-8 shadow-2xl sm:rounded-3xl border border-white/20 relative overflow-hidden">
-          {/* Glassmorphism effect */}
-          <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-white/5 rounded-3xl"></div>
-
-          <div className="relative">
-            {/* Admin Notice */}
-            {isAdminEmail && (
-              <div className="mb-8 p-6 bg-gradient-to-r from-red-50 to-pink-50 border border-red-200 rounded-2xl relative overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-r from-red-100/50 to-pink-100/50"></div>
-                <div className="relative flex items-center">
-                  <div className="w-12 h-12 bg-gradient-to-r from-red-500 to-pink-500 rounded-xl flex items-center justify-center mr-4">
-                    <Crown className="h-6 w-6 text-white" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-red-800 text-lg">Administrator Access Granted</p>
-                    <p className="text-sm text-red-600">You will receive full administrative privileges</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <form className="space-y-6">
-              {/* Full Name */}
-              <div className="group">
-                <label htmlFor="name" className="block text-sm font-semibold text-gray-700 mb-3">
-                  Full Name
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <User className="h-5 w-5 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
-                  </div>
-                  <input
-                    id="name"
-                    name="name"
-                    type="text"
-                    required
-                    value={formData.name}
-                    onChange={handleInputChange}
-                    className="block w-full pl-12 pr-4 py-4 border border-gray-200 rounded-2xl shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm"
-                    placeholder="Enter your full name"
-                  />
-                </div>
-              </div>
-
-              {/* Email */}
-              <div className="group">
-                <label htmlFor="email" className="block text-sm font-semibold text-gray-700 mb-3">
-                  Email Address
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <Mail className="h-5 w-5 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
-                  </div>
-                  <input
-                    id="email"
-                    name="email"
-                    type="email"
-                    required
-                    value={formData.email}
-                    onChange={handleInputChange}
-                    className="block w-full pl-12 pr-4 py-4 border border-gray-200 rounded-2xl shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm"
-                    placeholder="Enter your email address"
-                  />
-                </div>
-              </div>
-
-              {/* Password */}
-              <div className="group">
-                <label htmlFor="password" className="block text-sm font-semibold text-gray-700 mb-3">
-                  Password
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <Lock className="h-5 w-5 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
-                  </div>
-                  <input
-                    id="password"
-                    name="password"
-                    type={showPassword ? "text" : "password"}
-                    required
-                    value={formData.password}
-                    onChange={handleInputChange}
-                    className="block w-full pl-12 pr-14 py-4 border border-gray-200 rounded-2xl shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/50 backdrop-blur-sm"
-                    placeholder="Create a strong password"
-                  />
-                  <button
-                    type="button"
-                    className="absolute inset-y-0 right-0 pr-4 flex items-center"
-                    onClick={() => setShowPassword(!showPassword)}
-                  >
-                    {showPassword ? (
-                      <EyeOff className="h-5 w-5 text-gray-400 hover:text-gray-600 transition-colors" />
-                    ) : (
-                      <Eye className="h-5 w-5 text-gray-400 hover:text-gray-600 transition-colors" />
-                    )}
-                  </button>
-                </div>
-                <p className="mt-2 text-xs text-gray-500">Must be at least 6 characters long</p>
-              </div>
-
-              {/* Role Selection */}
-              {!isAdminEmail ? (
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-4">Choose Your Role</label>
-                  <div className="grid grid-cols-1 gap-3">
-                    {roleOptions.map((option) => (
-                      <label key={option.value} className="relative">
-                        <input
-                          type="radio"
-                          name="role"
-                          value={option.value}
-                          checked={formData.role === option.value}
-                          onChange={handleInputChange}
-                          className="sr-only"
-                        />
-                        <div
-                          className={`p-4 rounded-2xl border-2 cursor-pointer transition-all duration-200 ${
-                            formData.role === option.value
-                              ? "border-blue-500 bg-blue-50 shadow-lg"
-                              : "border-gray-200 bg-white/50 hover:border-gray-300"
-                          }`}
-                        >
-                          <div className="flex items-center">
-                            <div
-                              className={`w-10 h-10 rounded-xl flex items-center justify-center mr-4 ${
-                                formData.role === option.value ? "bg-blue-500 text-white" : "bg-gray-100 text-gray-500"
-                              }`}
-                            >
-                              {option.icon}
-                            </div>
-                            <div>
-                              <div className="font-semibold text-gray-900">{option.label}</div>
-                              <div className="text-sm text-gray-600">{option.description}</div>
-                            </div>
-                          </div>
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-3">Assigned Role</label>
-                  <div className="p-4 rounded-2xl bg-gradient-to-r from-red-50 to-pink-50 border-2 border-red-200">
-                    <div className="flex items-center">
-                      <div className="w-10 h-10 bg-gradient-to-r from-red-500 to-pink-500 rounded-xl flex items-center justify-center mr-4">
-                        <Crown className="h-5 w-5 text-white" />
-                      </div>
-                      <div>
-                        <div className="font-semibold text-red-800">Administrator</div>
-                        <div className="text-sm text-red-600">Full system access and control</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Submit Button */}
-              <div className="pt-4">
-                <button
-                  type="button"
-                  onClick={handleSignup}
-                  disabled={isLoading || !formData.name || !formData.email || !formData.password}
-                  className="group relative w-full flex justify-center py-4 px-6 border border-transparent text-lg font-semibold rounded-2xl text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-xl hover:shadow-2xl transform hover:scale-[1.02]"
-                >
-                  {isLoading ? (
-                    <div className="flex items-center">
-                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mr-3"></div>
-                      Creating Account...
-                    </div>
-                  ) : (
-                    <div className="flex items-center">
-                      {isAdminEmail ? "Create Admin Account" : "Create Account"}
-                      <ArrowRight className="ml-3 h-5 w-5 group-hover:translate-x-1 transition-transform" />
-                    </div>
-                  )}
-                </button>
-              </div>
-            </form>
-
-            <div className="mt-8">
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-gray-300" />
-                </div>
-                <div className="relative flex justify-center text-sm">
-                  <span className="px-4 bg-white/80 text-gray-500 rounded-full">Already have an account?</span>
-                </div>
-              </div>
-
-              <div className="mt-6 text-center">
-                <Link
-                  href="/login"
-                  className="font-semibold text-transparent bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text hover:from-blue-700 hover:to-purple-700 transition-all duration-200"
-                >
-                  Sign in to your account →
-                </Link>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
+        {errors.form && (
+          <p role="alert" className="rounded-md bg-danger-soft px-3 py-2 text-body text-danger">
+            {errors.form}
+          </p>
+        )}
+        <Button type="submit" variant="primary" loading={busy} className="w-full">
+          {busy ? "Creating account…" : "Create account"}
+        </Button>
+      </form>
+    </AuthShell>
+  );
 }

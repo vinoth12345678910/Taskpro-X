@@ -1,115 +1,95 @@
-"use client"
-import { useEffect, useState } from "react"
-import { auth } from "@/utils/firebase"
-import { useRouter } from "next/navigation"
-import LogoutButton from "@/components/LogoutButton"
-import { db } from "@/utils/firebase"
-import { collection, getDocs } from "firebase/firestore"
+"use client";
+import { collection, getDocs, orderBy, query, where } from "firebase/firestore";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { homeFor, useAuth } from "@/components/providers/AuthProvider";
+import { FullPageLoading } from "@/components/workspace/WorkspaceApp";
+import { Button } from "@/components/ui/Button";
+import { Badge, EmptyState, ErrorState, Logo, Skeleton } from "@/components/ui/misc";
+import { db } from "@/lib/firebase";
+import { logError } from "@/lib/logger";
+import { toDate } from "@/lib/firestore-utils";
+import { Shield, Users, LayoutGrid } from "lucide-react";
+
+interface TeamRow { id: string; teamName: string; leadName: string; leadEmail: string; createdAt?: Date }
+interface UserRow { id: string; name: string; email: string; role: string }
+
+const dateFmt = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" });
 
 export default function AdminDashboard() {
-  const router = useRouter()
-  const [user, setUser] = useState<any>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [teams, setTeams] = useState<any[]>([])
-  const [users, setUsers] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+  const router = useRouter();
+  const { status, profile, signOut } = useAuth();
+  const [teams, setTeams] = useState<TeamRow[] | null>(null);
+  const [users, setUsers] = useState<UserRow[] | null>(null);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(async (user) => {
-      if (!user) {
-        router.push("/login")
-      } else {
-        setUser(user)
-        setIsLoading(false) // ✅ Add this line to stop loading
-      }
-    })
-    return () => unsubscribe()
-  }, [])
+    if (status === "signed-out") router.replace("/login");
+    else if (status === "ready" && profile && profile.role !== "admin") router.replace(homeFor(profile.role));
+  }, [status, profile, router]);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true)
-      const teamSnap = await getDocs(collection(db, "team_invites"))
-      setTeams(teamSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })))
-      const userSnap = await getDocs(collection(db, "users"))
-      setUsers(userSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })))
-      setLoading(false)
+  const load = useCallback(async () => {
+    setError(false);
+    try {
+      const [t, u] = await Promise.all([
+        getDocs(query(collection(db, "team_members"), where("userType", "==", "TEAM_LEAD"))),
+        getDocs(query(collection(db, "users"), orderBy("name"))),
+      ]);
+      setTeams(t.docs.map((d) => ({ id: d.id, teamName: d.data().teamName, leadName: d.data().name, leadEmail: d.data().email, createdAt: toDate(d.data().joinedAt) })));
+      setUsers(u.docs.map((d) => ({ id: d.id, name: d.data().name ?? "", email: d.data().email ?? "", role: d.data().role ?? "member" })));
+    } catch (e) {
+      logError("admin", "load failed", e);
+      setError(true);
     }
-    fetchData()
-  }, [])
+  }, []);
 
-  if (!user || isLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    )
-  }
+  const isAdmin = status === "ready" && profile?.role === "admin";
+  useEffect(() => {
+    if (isAdmin) void load();
+  }, [isAdmin, load]);
+
+  if (!isAdmin) return <FullPageLoading label="Loading administration" />;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Admin Navbar */}
-      <nav className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-3">
-              <div className="flex items-center justify-center w-10 h-10 bg-red-600 rounded-xl shadow-sm">
-                <span className="text-white font-bold text-lg">T</span>
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900 tracking-tight">TaskProx Admin</h1>
-                <p className="text-xs text-red-600 font-medium">Administrator Panel</p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-4">
-              <div className="text-sm text-gray-700">
-                <span className="font-medium">Hello Admin,</span>{" "}
-                <span className="text-gray-900 font-semibold">{localStorage.getItem("userName") || user.email}</span>
-              </div>
-              <LogoutButton />
-            </div>
-          </div>
+    <div className="min-h-dvh bg-paper">
+      <header className="flex h-14 items-center justify-between border-b border-line px-4 sm:px-6">
+        <span className="flex items-center gap-2.5 text-title font-semibold"><Logo size={26} /> TaskProX <Badge tone="accent"><Shield size={11} aria-hidden="true" /> Admin</Badge></span>
+        <div className="flex items-center gap-2">
+          <span className="hidden text-body text-ink-3 sm:block">{profile?.name}</span>
+          <ThemeToggle />
+          <Button size="sm" onClick={() => void signOut()}>Sign out</Button>
         </div>
-      </nav>
-
-      {/* Main Content Area - Empty for now */}
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <h1 className="text-2xl font-bold mb-6">Admin Dashboard</h1>
-        {loading ? (
-          <div>Loading...</div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {/* Teams List */}
-            <div className="bg-white rounded shadow p-4">
-              <h2 className="text-lg font-semibold mb-4">All Teams</h2>
-              <ul className="space-y-3">
-                {teams.length === 0 && <li className="text-gray-500">No teams found.</li>}
-                {teams.map(team => (
-                  <li key={team.id} className="border rounded p-3 bg-gray-50">
-                    <div className="font-semibold">{team.teamName}</div>
-                    <div className="text-sm text-gray-600">Lead: {team.teamLeadName} ({team.teamLeadEmail})</div>
-                    <div className="text-xs text-gray-500">Invite Code: {team.code}</div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            {/* Users List */}
-            <div className="bg-white rounded shadow p-4">
-              <h2 className="text-lg font-semibold mb-4">All Users</h2>
-              <ul className="space-y-3">
-                {users.length === 0 && <li className="text-gray-500">No users found.</li>}
-                {users.map(user => (
-                  <li key={user.id} className="border rounded p-3 bg-gray-50">
-                    <div className="font-semibold">{user.name}</div>
-                    <div className="text-sm text-gray-600">{user.email}</div>
-                    <div className="text-xs text-gray-500">Role: {user.userType}</div>
-                  </li>
-                ))}
-              </ul>
-            </div>
+      </header>
+      <main id="main" className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+        <h1 className="text-heading font-semibold tracking-tight">Administration</h1>
+        <p className="mb-6 text-body text-ink-3">Read-only overview of teams and accounts. Roles are changed in the Firebase console.</p>
+        {error && <ErrorState title="Couldn't load data" onRetry={() => void load()}>You may not have administrator permissions.</ErrorState>}
+        {!error && (
+          <div className="grid gap-6 lg:grid-cols-2">
+            <section aria-labelledby="teams-h" className="rounded-lg border border-line bg-surface">
+              <h2 id="teams-h" className="flex items-center gap-2 border-b border-line px-4 py-3 text-title font-semibold"><LayoutGrid size={18} aria-hidden="true" /> Teams {teams && <span className="font-normal text-ink-3">({teams.length})</span>}</h2>
+              {teams === null ? <div className="space-y-2 p-4" aria-busy="true">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-12" />)}</div>
+                : teams.length === 0 ? <EmptyState icon={<LayoutGrid size={22} />} title="No teams yet">Teams appear here when a team lead creates one.</EmptyState>
+                : <ul className="divide-y divide-line">{teams.map((t) => (
+                    <li key={t.id} className="px-4 py-3">
+                      <p className="text-body font-medium">{t.teamName}</p>
+                      <p className="text-caption text-ink-3">Lead: {t.leadName} · {t.leadEmail}{t.createdAt && ` · created ${dateFmt.format(t.createdAt)}`}</p>
+                    </li>))}</ul>}
+            </section>
+            <section aria-labelledby="users-h" className="rounded-lg border border-line bg-surface">
+              <h2 id="users-h" className="flex items-center gap-2 border-b border-line px-4 py-3 text-title font-semibold"><Users size={18} aria-hidden="true" /> Accounts {users && <span className="font-normal text-ink-3">({users.length})</span>}</h2>
+              {users === null ? <div className="space-y-2 p-4" aria-busy="true">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-12" />)}</div>
+                : users.length === 0 ? <EmptyState icon={<Users size={22} />} title="No accounts" />
+                : <ul className="divide-y divide-line">{users.map((u) => (
+                    <li key={u.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                      <div className="min-w-0"><p className="truncate text-body font-medium">{u.name}</p><p className="truncate text-caption text-ink-3">{u.email}</p></div>
+                      <Badge tone={u.role === "admin" ? "danger" : u.role === "team_lead" ? "accent" : "neutral"}>{u.role.replace("_", " ")}</Badge>
+                    </li>))}</ul>}
+            </section>
           </div>
         )}
       </main>
     </div>
-  )
+  );
 }

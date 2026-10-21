@@ -1,26 +1,264 @@
 @import "tailwindcss";
 
+/*
+ * TaskProX design tokens.
+ * Identity: warm paper neutrals, an ink-dark navigation rail and a single vermilion accent.
+ * Semantic tokens only — components never hard-code colours.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
+
+  /* surfaces */
+  --paper: #f6f4ef; /* app background */
+  --surface: #ffffff; /* cards, inputs, panels */
+  --surface-2: #efece5; /* subtle fills, hover */
+  --surface-3: #e6e2d8; /* pressed, tracks */
+  --line: #e1ddd2; /* separators */
+  --line-strong: #cbc6b8; /* input borders */
+
+  /* text */
+  --ink: #1c1a16;
+  --ink-2: #4a463d;
+  --ink-3: #6b665a; /* >= 4.5:1 on paper and surface */
+
+  /* accent (vermilion) */
+  --accent: #c43a1b; /* 5.3:1 against white */
+  --accent-hover: #a92f14;
+  --accent-ink: #ffffff;
+  --accent-soft: #fbe8e1;
+  --accent-text: #a52f13; /* accent used as text on paper/surface */
+
+  /* navigation rail */
+  --rail: #1c1a16;
+  --rail-2: #2a2721;
+  --rail-ink: #ece8dd;
+  --rail-ink-2: #a8a295;
+  --rail-line: #38342c;
+
+  /* status */
+  --ok: #17724a;
+  --ok-soft: #dff3e7;
+  --warn: #8a5a00;
+  --warn-soft: #fbefcf;
+  --danger: #b3261e;
+  --danger-soft: #fbe3e0;
+  --info: #2a5db0;
+  --info-soft: #e1ebfa;
+
+  --focus: #1c1a16;
+  --shadow-1: 0 1px 2px rgb(28 26 22 / 0.06);
+  --shadow-2: 0 8px 24px rgb(28 26 22 / 0.12), 0 2px 6px rgb(28 26 22 / 0.06);
+  --overlay: rgb(28 26 22 / 0.45);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #141310;
+  --surface: #1c1b17;
+  --surface-2: #26241f;
+  --surface-3: #312f28;
+  --line: #2f2d26;
+  --line-strong: #484539;
+  --ink: #efebe0;
+  --ink-2: #c3beb0;
+  --ink-3: #9a9484;
+  --accent: #ee6a47;
+  --accent-hover: #f5805f;
+  --accent-ink: #1a0d08;
+  --accent-soft: #3a2018;
+  --accent-text: #f58e70;
+  --rail: #0f0e0c;
+  --rail-2: #1c1b17;
+  --rail-ink: #ece8dd;
+  --rail-ink-2: #9a9484;
+  --rail-line: #26241f;
+  --ok: #55c58a;
+  --ok-soft: #14301f;
+  --warn: #e3b24a;
+  --warn-soft: #33270b;
+  --danger: #f2877f;
+  --danger-soft: #3b1714;
+  --info: #7fa8ee;
+  --info-soft: #14233d;
+  --focus: #efebe0;
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-2: 0 8px 24px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.4);
+  --overlay: rgb(0 0 0 / 0.6);
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --paper: #141310;
+    --surface: #1c1b17;
+    --surface-2: #26241f;
+    --surface-3: #312f28;
+    --line: #2f2d26;
+    --line-strong: #484539;
+    --ink: #efebe0;
+    --ink-2: #c3beb0;
+    --ink-3: #9a9484;
+    --accent: #ee6a47;
+    --accent-hover: #f5805f;
+    --accent-ink: #1a0d08;
+    --accent-soft: #3a2018;
+    --accent-text: #f58e70;
+    --rail: #0f0e0c;
+    --rail-2: #1c1b17;
+    --rail-ink: #ece8dd;
+    --rail-ink-2: #9a9484;
+    --rail-line: #26241f;
+    --ok: #55c58a;
+    --ok-soft: #14301f;
+    --warn: #e3b24a;
+    --warn-soft: #33270b;
+    --danger: #f2877f;
+    --danger-soft: #3b1714;
+    --info: #7fa8ee;
+    --info-soft: #14233d;
+    --focus: #efebe0;
+    --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-2: 0 8px 24px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.4);
+    --overlay: rgb(0 0 0 / 0.6);
   }
 }
 
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-text: var(--accent-text);
+  --color-rail: var(--rail);
+  --color-rail-2: var(--rail-2);
+  --color-rail-ink: var(--rail-ink);
+  --color-rail-ink-2: var(--rail-ink-2);
+  --color-rail-line: var(--rail-line);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+
+  --font-sans: var(--font-grotesk), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  /* type scale */
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1rem;
+  --text-body: 0.9375rem;
+  --text-body--line-height: 1.5rem;
+  --text-title: 1.0625rem;
+  --text-title--line-height: 1.5rem;
+  --text-heading: 1.375rem;
+  --text-heading--line-height: 1.75rem;
+  --text-display: 2.5rem;
+  --text-display--line-height: 1.1;
+
+  /* radii: sm controls, md fields/buttons, lg panels */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  --shadow-card: var(--shadow-1);
+  --shadow-pop: var(--shadow-2);
+}
+
+html {
+  background: var(--paper);
+}
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  line-height: 1.5rem;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Visible, consistent focus for every interactive element */
+:where(a, button, input, textarea, select, summary, [role="button"], [tabindex]):focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+.on-rail :where(a, button):focus-visible {
+  outline-color: var(--rail-ink);
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+/* Thin, quiet scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+/* Skeleton shimmer (transform-free, opacity only; disabled for reduced motion) */
+@keyframes tpx-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+.skeleton {
+  background: var(--surface-3);
+  border-radius: var(--radius-sm);
+  animation: tpx-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes tpx-spin {
+  to { transform: rotate(360deg); }
+}
+.spinner {
+  width: 1em;
+  height: 1em;
+  border-radius: 9999px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  animation: tpx-spin 0.7s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.001ms !important;
+  }
+  .spinner {
+    animation: none;
+    border-right-color: currentColor;
+    opacity: 0.6;
+  }
+}
+
+.sr-only-focusable:not(:focus):not(:focus-within) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@keyframes tpx-pop {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to { opacity: 1; transform: none; }
 }

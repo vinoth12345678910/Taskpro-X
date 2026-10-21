@@ -1,13 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // ✅ This tells Next.js to generate static files (no server needed)
+  // Static export: the app is served by Firebase Hosting; there is no Node server at runtime.
   output: "export",
-  
-  // ✅ Optional: Skip linting during build if you want
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
 };
 
 export default nextConfig;

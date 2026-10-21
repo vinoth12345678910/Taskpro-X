@@ -249,6 +249,14 @@ describe("invites and membership", () => {
     await assertSucceeds(getDocs(query(collection(db(DAVE), "team_members"), where("uid", "==", DAVE))));
   });
 
+  it("rosters can be listed by teamLeadId alone, admins can list leads, and non-members cannot list everything", async () => {
+    // regression: a list query that filters only on teamLeadId must not error on the undefined `uid` field
+    await assertSucceeds(getDocs(query(collection(db(LEAD), "team_members"), where("teamLeadId", "==", LEAD))));
+    await assertSucceeds(getDocs(query(collection(db(ADMIN), "team_members"), where("userType", "==", "TEAM_LEAD"))));
+    await assertFails(getDocs(query(collection(db(BOB), "team_members"), where("userType", "==", "TEAM_LEAD"))));
+    await assertFails(getDocs(collection(db(DAVE), "team_members")));
+  });
+
   it("only the lead may remove others; a member may leave; nobody else may delete", async () => {
     await assertFails(deleteDoc(doc(db(CAROL), "team_members", `${LEAD}_${BOB}`)));
     await assertFails(deleteDoc(doc(db(BOB), "team_members", `${LEAD}_${LEAD}`)));
