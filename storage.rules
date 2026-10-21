@@ -1,0 +1,32 @@
+rules_version = '2';
+
+// Shared team resources. Path: teams/{teamId}/resources/{resourceId}/{fileName}
+// teamId is the team lead's uid; membership is the Firestore document
+// team_members/{teamId}_{uid}. Content type and size are enforced here and are
+// NOT taken on trust from the client's metadata document.
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isMember(teamId) {
+      return request.auth != null
+        && firestore.exists(/databases/(default)/documents/team_members/$(teamId + '_' + request.auth.uid));
+    }
+
+    match /teams/{teamId}/resources/{resourceId}/{fileName} {
+      allow read: if isMember(teamId);
+
+      allow create: if isMember(teamId)
+        && request.resource.size > 0
+        && request.resource.size <= 10 * 1024 * 1024
+        && request.resource.metadata.uploadedBy == request.auth.uid
+        && request.resource.contentType.matches(
+             'image/(png|jpeg|gif|webp)|application/pdf|text/plain|text/csv|application/json|application/zip'
+             + '|application/msword|application/vnd\\.ms-(excel|powerpoint)'
+             + '|application/vnd\\.openxmlformats-officedocument\\.[a-z.]+');
+
+      allow update: if false;
+
+      allow delete: if isMember(teamId)
+        && (resource.metadata.uploadedBy == request.auth.uid || request.auth.uid == teamId);
+    }
+  }
+}

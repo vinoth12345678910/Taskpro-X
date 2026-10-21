@@ -1,8 +1,301 @@
 rules_version = '2';
+
+// TaskProX security rules.
+//
+// Trust model: the app is a static site, so these rules ARE the trusted
+// backend. Identity comes only from request.auth; team membership is looked
+// up by the deterministic document id  team_members/{teamId}_{uid}  where
+// teamId is the team lead's uid. Nothing the client says about its own role,
+// team or ownership is believed unless it is cross-checked here.
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+
+    // ---------- helpers ----------
+    function signedIn() { return request.auth != null; }
+    function me() { return request.auth.uid; }
+    function docPath(col, id) { return /databases/$(database)/documents/$(col)/$(id); }
+
+    function isMember(teamId) {
+      return signedIn() && exists(docPath('team_members', teamId + '_' + me()));
+    }
+    function isMemberUid(teamId, uid) {
+      return exists(docPath('team_members', teamId + '_' + uid));
+    }
+    // The team lead is the user whose uid is the team id.
+    function isLead(teamId) { return signedIn() && me() == teamId && isMember(teamId); }
+    function roleOf(uid) { return get(docPath('users', uid)).data.get('role', 'member'); }
+    function isAdmin() {
+      return signedIn() && exists(docPath('users', me())) && roleOf(me()) == 'admin';
+    }
+    function isNonEmptyString(v, max) { return v is string && v.size() > 0 && v.size() <= max; }
+    function isOptionalString(v, max) { return v is string && v.size() <= max; }
+
+    // ---------- users ----------
+    // Roles can never be self-assigned beyond member/team_lead and can never
+    // change afterwards. Admin is granted only by editing the document in the
+    // Firebase console (or Admin SDK).
+    match /users/{uid} {
+      allow get: if signedIn() && (me() == uid || isAdmin());
+      allow list: if isAdmin();
+      allow create: if signedIn() && me() == uid
+        && request.resource.data.keys().hasOnly(['name', 'email', 'role', 'createdAt'])
+        && request.resource.data.role in ['member', 'team_lead']
+        && isNonEmptyString(request.resource.data.name, 80)
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.createdAt == request.time;
+      allow update: if signedIn() && me() == uid
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['name', 'lastLogin', 'notificationPrefs'])
+        && isNonEmptyString(request.resource.data.name, 80);
+      allow delete: if false;
+    }
+
+    // ---------- invites (document id == the code) ----------
+    match /team_invites/{code} {
+      // Codes are only usable by someone who already knows them: no listing.
+      allow get: if signedIn();
+      allow list: if signedIn() && (isAdmin() || resource.data.teamLeadId == me());
+      allow create: if signedIn()
+        && request.resource.data.teamLeadId == me()
+        && roleOf(me()) == 'team_lead'
+        && request.resource.data.code == code
+        && code.matches('^[A-Z0-9]{6,12}$')
+        && isNonEmptyString(request.resource.data.teamName, 60)
+        && request.resource.data.isActive == true
+        && request.resource.data.createdAt == request.time;
+      allow update: if signedIn() && resource.data.teamLeadId == me()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isActive']);
+      allow delete: if signedIn() && resource.data.teamLeadId == me();
+    }
+
+    // ---------- membership (document id == {teamId}_{uid}) ----------
+    function validInvite(d) {
+      let inv = get(docPath('team_invites', d.inviteCode)).data;
+      return inv.teamLeadId == d.teamLeadId && inv.isActive == true && inv.teamName == d.teamName;
+    }
+    match /team_members/{memberId} {
+      // .get() with defaults: when evaluated against a list query's constraints, fields the query does not
+      // filter on are undefined, and reading them directly would raise an error instead of evaluating to false.
+      allow get, list: if signedIn()
+        && (resource.data.get('uid', '') == me()
+            || isMember(resource.data.get('teamLeadId', ''))
+            || isAdmin());
+
+      allow create: if signedIn()
+        && request.resource.data.uid == me()
+        && memberId == request.resource.data.teamLeadId + '_' + me()
+        && request.resource.data.keys().hasOnly(
+             ['uid', 'name', 'email', 'userType', 'teamLeadId', 'teamLeadName', 'teamLeadEmail',
+              'teamName', 'joinedAt', 'inviteCode', 'prefs'])
+        && request.resource.data.joinedAt == request.time
+        && isNonEmptyString(request.resource.data.name, 80)
+        && request.resource.data.email == request.auth.token.email
+        && (
+          // The lead creating their own team
+          (request.resource.data.teamLeadId == me()
+            && request.resource.data.userType == 'TEAM_LEAD'
+            && roleOf(me()) == 'team_lead')
+          ||
+          // A member joining with a valid, active invite code
+          (request.resource.data.teamLeadId != me()
+            && request.resource.data.userType == 'MEMBER'
+            && request.resource.data.inviteCode is string
+            && validInvite(request.resource.data))
+        );
+
+      // Members may edit only their own display name / preferences.
+      allow update: if signedIn() && resource.data.uid == me()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['prefs', 'name']);
+
+      // Leave a team, or lead removes someone else.
+      allow delete: if signedIn() && (
+        (resource.data.uid == me() && resource.data.userType == 'MEMBER')
+        || (isLead(resource.data.teamLeadId) && resource.data.uid != me()));
+    }
+
+    // ---------- chat ----------
+    function reactionCodes() { return ['up', 'heart', 'laugh', 'party', 'eyes', 'check']; }
+    function validAuthor(a) {
+      return a.keys().hasOnly(['uid', 'name', 'email', 'userType']) && a.uid == me()
+        && isNonEmptyString(a.name, 80) && a.userType in ['TEAM_LEAD', 'MEMBER'];
+    }
+    function validMentions(d) {
+      return !('mentions' in d) || (d.mentions is list && d.mentions.size() <= 20);
+    }
+    function validNewMessage(d) {
+      return isNonEmptyString(d.text, 4000)
+        && d.timestamp == request.time
+        && validAuthor(d.author)
+        && validMentions(d);
+    }
+    function reactionsChangeIsMine(before, after) {
+      return after.diff(before).affectedKeys().hasOnly([me()])
+        && after.get(me(), []).size() <= 6
+        && after.get(me(), []).hasOnly(reactionCodes());
+    }
+    // author edit / soft delete (author or team lead) shared by messages & replies
+    function isAuthorEdit() {
+      return resource.data.author.uid == me()
+        && resource.data.get('deleted', false) == false
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'editedAt', 'mentions'])
+        && isNonEmptyString(request.resource.data.text, 4000)
+        && request.resource.data.editedAt == request.time
+        && validMentions(request.resource.data);
+    }
+    function isSoftDelete(room) {
+      return (resource.data.author.uid == me() || isLead(room))
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['deleted', 'text', 'deletedAt'])
+        && request.resource.data.deleted == true
+        && request.resource.data.text == ''
+        && request.resource.data.deletedAt == request.time;
+    }
+
+    match /chat_messages/{messageId} {
+      allow get, list: if isMember(resource.data.roomId);
+
+      allow create: if isMember(request.resource.data.roomId)
+        && request.resource.data.keys().hasOnly(['roomId', 'text', 'timestamp', 'author', 'mentions', 'replyCount', 'reactions'])
+        && request.resource.data.get('replyCount', 0) == 0
+        && request.resource.data.get('reactions', {}) == {}
+        && validNewMessage(request.resource.data);
+
+      allow update: if isMember(resource.data.roomId) && (
+        isAuthorEdit()
+        || isSoftDelete(resource.data.roomId)
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions'])
+            && reactionsChangeIsMine(resource.data.get('reactions', {}), request.resource.data.reactions))
+        // a reply was added: counter may only go up by exactly one
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['replyCount', 'lastReplyAt'])
+            && request.resource.data.replyCount == resource.data.get('replyCount', 0) + 1
+            && request.resource.data.lastReplyAt == request.time));
+
+      allow delete: if false;
+
+      match /replies/{replyId} {
+        // authorised through the parent: a list query cannot inspect resource.data without a where() clause
+        allow get, list: if isMember(get(docPath('chat_messages', messageId)).data.roomId);
+
+        allow create: if isMember(request.resource.data.roomId)
+          && request.resource.data.keys().hasOnly(['roomId', 'text', 'timestamp', 'author', 'mentions', 'reactions'])
+          && get(docPath('chat_messages', messageId)).data.roomId == request.resource.data.roomId
+          && request.resource.data.get('reactions', {}) == {}
+          && validNewMessage(request.resource.data);
+
+        allow update: if isMember(resource.data.roomId) && (
+          isAuthorEdit()
+          || isSoftDelete(resource.data.roomId)
+          || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions'])
+              && reactionsChangeIsMine(resource.data.get('reactions', {}), request.resource.data.reactions)));
+
+        allow delete: if false;
+      }
+    }
+
+    // ---------- events ----------
+    // startAt/endAt are UTC Timestamps; timeZone is the IANA zone of the author.
+    function validEvent(d, teamId) {
+      return d.teamId == teamId
+        && d.keys().hasOnly(['teamId', 'title', 'description', 'startAt', 'endAt', 'timeZone', 'status',
+                             'createdBy', 'createdByName', 'createdAt', 'updatedAt', 'cancelledAt'])
+        && isNonEmptyString(d.title, 120)
+        && isOptionalString(d.description, 2000)
+        && d.startAt is timestamp && d.endAt is timestamp
+        && d.endAt > d.startAt
+        && d.endAt <= d.startAt + duration.value(14, 'd')
+        && isNonEmptyString(d.timeZone, 64)
+        && d.status in ['scheduled', 'cancelled'];
+    }
+    match /events/{eventId} {
+      allow get, list: if isMember(resource.data.teamId);
+      allow create: if isLead(request.resource.data.teamId)
+        && validEvent(request.resource.data, request.resource.data.teamId)
+        && request.resource.data.status == 'scheduled'
+        && request.resource.data.createdBy == me()
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow update: if isLead(resource.data.teamId)
+        && validEvent(request.resource.data, resource.data.teamId)
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if isLead(resource.data.teamId);
+    }
+
+    // ---------- notifications ----------
+    // Written by the acting user for a teammate (document id is deterministic,
+    // so a retry cannot create a duplicate); only the recipient reads/updates.
+    function validNotification(d) {
+      return d.keys().hasOnly(['recipientId', 'teamId', 'type', 'actor', 'title', 'body', 'target', 'groupKey', 'read', 'createdAt'])
+        && d.actor.keys().hasOnly(['uid', 'name']) && d.actor.uid == me()
+        && d.read == false
+        && d.createdAt == request.time
+        && isNonEmptyString(d.title, 160)
+        && isOptionalString(d.body, 240)
+        && d.target.keys().hasOnly(['kind', 'id', 'parentId'])
+        && d.target.kind in ['message', 'event', 'team']
+        && d.type in ['mention', 'reply', 'member_joined', 'event_created', 'event_updated', 'event_cancelled']
+        && d.recipientId != me()
+        && isMember(d.teamId)
+        && isMemberUid(d.teamId, d.recipientId)
+        && (
+          d.type in ['mention', 'reply']
+          || (d.type == 'member_joined' && d.recipientId == d.teamId)
+          || (d.type in ['event_created', 'event_updated', 'event_cancelled'] && isLead(d.teamId))
+        );
+    }
+    match /notifications/{notificationId} {
+      allow get, list: if signedIn() && resource.data.recipientId == me();
+      allow create: if signedIn() && validNotification(request.resource.data);
+      allow update: if signedIn() && resource.data.recipientId == me()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt']);
+      allow delete: if signedIn() && resource.data.recipientId == me();
+    }
+
+    // ---------- shared resources (metadata; files live in Storage) ----------
+    function validResource(d, teamId) {
+      return d.teamId == teamId
+        && d.keys().hasOnly(['teamId', 'kind', 'name', 'description', 'url', 'storagePath', 'size', 'contentType',
+                             'uploadedBy', 'uploadedByName', 'createdAt', 'updatedAt'])
+        && d.kind in ['file', 'link']
+        && isNonEmptyString(d.name, 200)
+        && isOptionalString(d.get('description', ''), 1000)
+        && (
+          (d.kind == 'link' && d.url is string && d.url.size() <= 2000 && d.url.matches('^https?://[^ ]+$') && !('storagePath' in d))
+          || (d.kind == 'file'
+              && d.storagePath == 'teams/' + teamId + '/resources/' + d.storagePath.split('/')[3] + '/' + d.storagePath.split('/')[4]
+              && d.size is int && d.size > 0 && d.size <= 10485760
+              && d.contentType is string)
+        );
+    }
+    match /resources/{resourceId} {
+      allow get, list: if isMember(resource.data.teamId);
+      allow create: if isMember(request.resource.data.teamId)
+        && validResource(request.resource.data, request.resource.data.teamId)
+        && request.resource.data.uploadedBy == me()
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      // Owner or team lead may rename / re-describe.
+      allow update: if (resource.data.uploadedBy == me() || isLead(resource.data.teamId))
+        && isMember(resource.data.teamId)
+        && validResource(request.resource.data, resource.data.teamId)
+        && request.resource.data.uploadedBy == resource.data.uploadedBy
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if isMember(resource.data.teamId)
+        && (resource.data.uploadedBy == me() || isLead(resource.data.teamId));
+    }
+
+    // ---------- presence ----------
+    match /presence/{presenceId} {
+      allow get, list: if isMember(resource.data.teamId);
+      allow create, update: if signedIn()
+        && request.resource.data.keys().hasOnly(['teamId', 'uid', 'lastSeen', 'status'])
+        && request.resource.data.uid == me()
+        && presenceId == request.resource.data.teamId + '_' + me()
+        && request.resource.data.status in ['online', 'away']
+        && request.resource.data.lastSeen == request.time
+        && isMember(request.resource.data.teamId);
+      allow delete: if signedIn() && resource.data.uid == me();
     }
   }
 }
