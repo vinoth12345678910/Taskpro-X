@@ -104,21 +104,20 @@ export function EventDialog({ open, onOpenChange, event }: { open: boolean; onOp
     <Dialog open={open} onOpenChange={(o) => !busy && onOpenChange(o)} title={event ? "Edit event" : "Schedule an event"} description="Everyone on the team sees this in their own time zone.">
       <form onSubmit={onSubmit} noValidate className="space-y-4 p-5">
         <Field label="Title" required error={errors.title} hint={`${title.length}/${EVENT_TITLE_MAX}`}>
-          {(p) => <Input {...p} invalid={p.invalid} value={title} maxLength={EVENT_TITLE_MAX + 20} onChange={(e) => setTitle(e.target.value)} placeholder="Sprint planning" autoFocus />}
+          {(p) => <Input {...p} value={title} maxLength={EVENT_TITLE_MAX + 20} onChange={(e) => setTitle(e.target.value)} placeholder="Sprint planning" autoFocus />}
         </Field>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Starts" required error={errors.start}>
-            {(p) => <Input {...p} invalid={p.invalid} type="datetime-local" value={start} onChange={(e) => changeStart(e.target.value)} />}
+            {(p) => <Input {...p} type="datetime-local" value={start} onChange={(e) => changeStart(e.target.value)} />}
           </Field>
           <Field label="Ends" required error={errors.end}>
-            {(p) => <Input {...p} invalid={p.invalid} type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} />}
+            {(p) => <Input {...p} type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} />}
           </Field>
         </div>
         <Field label="Time zone" error={errors.timeZone} hint="Times above are read in this zone.">
           {(p) => (
             <select
               {...p}
-              aria-invalid={p.invalid || undefined}
               value={tz}
               onChange={(e) => setTz(e.target.value)}
               className="h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-body text-ink hover:border-ink-3"
@@ -132,7 +131,7 @@ export function EventDialog({ open, onOpenChange, event }: { open: boolean; onOp
           )}
         </Field>
         <Field label="Description" error={errors.description} hint={`Optional · ${description.length}/${EVENT_DESC_MAX}`}>
-          {(p) => <Textarea {...p} invalid={p.invalid} rows={3} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Agenda, meeting link, location…" />}
+          {(p) => <Textarea {...p} rows={3} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Agenda, meeting link, location…" />}
         </Field>
         {errors.form && (
           <p role="alert" className="rounded-md bg-danger-soft px-3 py-2 text-body text-danger">

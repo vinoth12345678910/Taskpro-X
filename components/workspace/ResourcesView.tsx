@@ -142,8 +142,8 @@ function LinkDialog({ open, onOpenChange, editing }: { open: boolean; onOpenChan
   return (
     <Dialog open={open} onOpenChange={onOpenChange} title={editing ? (isFile ? "Edit file details" : "Edit link") : "Add a link"} description={editing ? undefined : "Share a document, board or page with your team."}>
       <form onSubmit={submit} className="space-y-4 p-5" noValidate>
-        <Field label="Name" required error={errors.name}>{(p) => <Input {...p} invalid={p.invalid} value={name} maxLength={200} onChange={(e) => setName(e.target.value)} autoFocus />}</Field>
-        {!editing && <Field label="Link" required error={errors.url}>{(p) => <Input {...p} invalid={p.invalid} type="url" placeholder="https://" value={url} onChange={(e) => setUrl(e.target.value)} />}</Field>}
+        <Field label="Name" required error={errors.name}>{(p) => <Input {...p} value={name} maxLength={200} onChange={(e) => setName(e.target.value)} autoFocus />}</Field>
+        {!editing && <Field label="Link" required error={errors.url}>{(p) => <Input {...p} type="url" placeholder="https://" value={url} onChange={(e) => setUrl(e.target.value)} />}</Field>}
         <Field label="Description" hint="Optional">{(p) => <Textarea {...p} rows={2} maxLength={1000} value={description} onChange={(e) => setDescription(e.target.value)} />}</Field>
         {errors.form && <p role="alert" className="rounded-md bg-danger-soft px-3 py-2 text-body text-danger">{errors.form}</p>}
         <div className="flex justify-end gap-2">

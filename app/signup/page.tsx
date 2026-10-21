@@ -79,10 +79,10 @@ export default function SignupPage() {
     >
       <form onSubmit={onSubmit} noValidate className="space-y-5">
         <Field label="Full name" required error={errors.name}>
-          {(p) => <Input {...p} name="name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} invalid={p.invalid} />}
+          {(p) => <Input {...p} name="name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />}
         </Field>
         <Field label="Email" required error={errors.email}>
-          {(p) => <Input {...p} type="email" name="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} invalid={p.invalid} />}
+          {(p) => <Input {...p} type="email" name="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />}
         </Field>
         <Field label="Password" required error={errors.password} hint="At least 6 characters.">
           {(p) => (
@@ -94,7 +94,6 @@ export default function SignupPage() {
                 autoComplete="new-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                invalid={p.invalid}
                 className="pr-11"
               />
               <button
