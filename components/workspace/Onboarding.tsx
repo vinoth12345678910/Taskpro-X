@@ -36,7 +36,7 @@ export function CreateTeamOnboarding({ profile }: { profile: Profile }) {
     <OnboardingFrame icon={<Crown size={22} />} title="Set up your team" lead={`Welcome, ${profile.name.split(" ")[0]}. Name your team to open its chat, calendar and shared files.`}>
       <form onSubmit={submit} noValidate className="space-y-4">
         <Field label="Team name" required error={error ?? undefined}>
-          {(p) => <Input {...p} invalid={p.invalid} value={name} onChange={(e) => setName(e.target.value)} placeholder="Design team" maxLength={80} autoFocus />}
+          {(p) => <Input {...p} value={name} onChange={(e) => setName(e.target.value)} placeholder="Design team" maxLength={80} autoFocus />}
         </Field>
         <Button type="submit" variant="primary" loading={busy} className="w-full">Create team</Button>
       </form>
@@ -77,7 +77,6 @@ export function JoinTeamOnboarding({ profile }: { profile: Profile }) {
           {(p) => (
             <Input
               {...p}
-              invalid={p.invalid}
               value={code}
               onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))}
               maxLength={12}

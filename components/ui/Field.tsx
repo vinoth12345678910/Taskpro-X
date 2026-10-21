@@ -11,7 +11,7 @@ interface FieldShellProps {
   hint?: ReactNode;
   error?: string;
   required?: boolean;
-  children: (p: { id: string; describedBy?: string; invalid: boolean }) => ReactNode;
+  children: (p: { id: string; "aria-describedby"?: string; "aria-invalid"?: true }) => ReactNode;
   className?: string;
 }
 
@@ -26,7 +26,7 @@ export function Field({ label, hint, error, required, children, className }: Fie
         {label}
         {required && <span className="text-danger" aria-hidden="true"> *</span>}
       </label>
-      {children({ id, describedBy, invalid: !!error })}
+      {children({ id, "aria-describedby": describedBy, "aria-invalid": error ? true : undefined })}
       {hint && !error && (
         <p id={hintId} className="text-caption text-ink-3">
           {hint}
@@ -42,7 +42,8 @@ export function Field({ label, hint, error, required, children, className }: Fie
 }
 
 type InputProps = InputHTMLAttributes<HTMLInputElement> & { invalid?: boolean };
-export const Input = forwardRef<HTMLInputElement, InputProps>(function Input({ invalid, className, ...rest }, ref) {
+export const Input = forwardRef<HTMLInputElement, InputProps>(function Input({ invalid: invalidProp, className, ...rest }, ref) {
+  const invalid = invalidProp ?? (rest["aria-invalid"] === true || rest["aria-invalid"] === "true");
   return (
     <input
       ref={ref}
@@ -54,7 +55,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input({ i
 });
 
 type TextareaProps = TextareaHTMLAttributes<HTMLTextAreaElement> & { invalid?: boolean };
-export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function Textarea({ invalid, className, ...rest }, ref) {
+export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function Textarea({ invalid: invalidProp, className, ...rest }, ref) {
+  const invalid = invalidProp ?? (rest["aria-invalid"] === true || rest["aria-invalid"] === "true");
   return (
     <textarea
       ref={ref}
